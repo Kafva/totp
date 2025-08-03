@@ -1,0 +1,19 @@
+[package]
+name = "totp"
+version = "0.1.0"
+edition = "2024"
+description = "Decoder for TOTP URIs"
+license = "MIT"
+
+[workspace]
+resolver = "3"
+members = [
+    "cli",
+]
+
+[dependencies]
+age = { version = "0.11.1", default-features = false, features = [] }
+
+[lib]
+name = "totp"
+path = "src/lib.rs"
