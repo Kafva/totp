@@ -5,10 +5,9 @@ use clap::Parser;
 use totp::decode;
 
 #[derive(Parser)]
-#[command(version,
-    about = "Decoder for TOTP URIs",
-    long_about = None)]
+#[command(version, about = "Decoder for TOTP URIs")]
 struct Args {
+    #[arg(help = "String to decode, otpauth://totp/...")]
     uri: Option<String>
 }
 
