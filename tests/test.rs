@@ -4,15 +4,15 @@ use totp::{calculate_totp, calculate_totp_now, TotpError};
 fn calculate_totp_test() {
     let url = "otpauth://tester@some.email.com/:foo?secret=NBSWY3DPEB4EICQ&algorithm=SHA1&digits=6&period=30";
     let code = calculate_totp(url, 3330).unwrap();
-    assert_eq!(code, 061_078);
+    assert_eq!(code, "061078");
 
     let url = "otpauth://tester@some.email.com/:foo?secret=NBSWY3DPEBZWQYJSGU3AU&algorithm=SHA256&digits=7";
     let code = calculate_totp(url, 3330).unwrap();
-    assert_eq!(code, 2_655_304);
+    assert_eq!(code, "2655304");
 
     let url = "otpauth://tester@some.email.com/:foo?secret=NBSWY3DPEBZWQYJVGEZAU&algorithm=SHA512&digits=8&period=10";
     let code = calculate_totp(url, 1110).unwrap();
-    assert_eq!(code, 39_265_203);
+    assert_eq!(code, "39265203");
 }
 
 #[test]

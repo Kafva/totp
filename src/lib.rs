@@ -51,14 +51,14 @@ impl From<crypto_common::InvalidLength> for TotpError {
 }
 
 /// Calculate the digits for a TOTP URL at present time
-pub fn calculate_totp_now(url: &str) -> Result<u32,TotpError> {
+pub fn calculate_totp_now(url: &str) -> Result<String,TotpError> {
     let now = time::SystemTime::now()
         .duration_since(UNIX_EPOCH).expect("Failed to determine current time");
     calculate_totp(url, now.as_secs())
 }
 
 /// Calculate the digits for a TOTP URL at `epoch`
-pub fn calculate_totp(url: &str, epoch: u64) -> Result<u32,TotpError> {
+pub fn calculate_totp(url: &str, epoch: u64) -> Result<String,TotpError> {
     macro_rules! query_get {
         ($url:ident, $key:literal) => (
             $url.query_pairs().find(|k| k.0 == $key).map(|k| k.1)
@@ -95,7 +95,19 @@ pub fn calculate_totp(url: &str, epoch: u64) -> Result<u32,TotpError> {
     let algorithm = query_get!(url, "algorithm").unwrap_or(Cow::Borrowed("sha1")).into_owned();
 
     let counter: u64 = epoch / period;
-    calculate_hotp(secret, &algorithm, digits, counter)
+
+    let code = calculate_hotp(secret, &algorithm, digits, counter)?;
+
+    // Return the zero-padded result, the caller should not need to parse the
+    // digits from the URL
+    let code = match digits {
+        6 => format!("{:0>6}", code),
+        7 => format!("{:0>7}", code),
+        8 => format!("{:0>8}", code),
+        9 => format!("{:0>9}", code),
+        _ => return Err(TotpError::TooManyDigits)
+    };
+    Ok(code.to_string())
 }
 
 /// Calculate the digits for a HOTP
