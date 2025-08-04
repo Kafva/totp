@@ -4,7 +4,7 @@
 
 use hmac::{digest::crypto_common, Hmac, Mac};
 
-use std::{borrow::Cow, str::FromStr, time::UNIX_EPOCH};
+use std::{borrow::Cow, num::ParseIntError, str::FromStr, time::{self, UNIX_EPOCH}};
 
 use url::{self, ParseError};
 
@@ -19,12 +19,19 @@ pub enum TotpError {
     MissingSecret,
     DecodeError(data_encoding::DecodeError),
     UriError(url::ParseError),
-    InvalidLength(crypto_common::InvalidLength)
+    InvalidLength(crypto_common::InvalidLength),
+    ParseIntError(ParseIntError)
 }
 
 impl From<ParseError> for TotpError {
     fn from(value: ParseError) -> Self {
         Self::UriError(value)
+    }
+}
+
+impl From<ParseIntError> for TotpError {
+    fn from(value: ParseIntError) -> Self {
+        Self::ParseIntError(value)
     }
 }
 
@@ -57,15 +64,23 @@ fn hmac_digest(secret: Vec<u8>, counter: &[u8], algorithm: &str) -> Result<Vec<u
     Ok(digest)
 }
 
-pub fn calculate(uri: &str) -> Result<u32,TotpError> {
-    // URL format:
-    //   otpauth://totp/<label>?secret=********************************&issuer=<issuer>
+/// Calculate the digits for a TOTP URL at `seconds` since `UNIX_EPOCH`.
+pub fn calculate(uri: &str, seconds: u64) -> Result<u32,TotpError> {
+    // Parse URL
     let uri = url::Url::from_str(uri)?;
     let Some(secret_b32) = query_get!(uri, "secret") else {
         return Err(TotpError::MissingSecret)
     };
 
-    // TODO: parse digits and period
+    let period = match query_get!(uri, "period") {
+        Some(d) => str::parse::<u64>(&d)?,
+        _ => 30
+    };
+
+    let digits = match query_get!(uri, "digits") {
+        Some(d) => str::parse::<u32>(&d)?,
+        _ => 6
+    };
 
     let secret = match data_encoding::BASE32_NOPAD.decode(secret_b32.as_bytes()) {
         Ok(s) => s,
@@ -74,9 +89,11 @@ pub fn calculate(uri: &str) -> Result<u32,TotpError> {
 
     let algorithm = query_get!(uri, "algorithm").unwrap_or(Cow::Borrowed("sha1")).into_owned();
 
+    // HOTP(K,C) = Truncate(HMAC-SHA-1(K,C))
     // TOTP = HOTP(K, T)
     //
-    // K = Key, should be the same length as the output of the HMAC hash
+    // K = Secret key
+    // C = 8 byte counter value
     // X = Time step in seconds (default 30s)
     // T = Current Unix time / X
     //
@@ -84,37 +101,35 @@ pub fn calculate(uri: &str) -> Result<u32,TotpError> {
     // for X steps. This allows for some grace time between the prover's
     // calculation and the verifier's calculation.
     //
-    let now = std::time::SystemTime::now().duration_since(UNIX_EPOCH)
-            .expect("Can not get current time");
-    let counter: u32 = now.as_secs().div_euclid(30) as u32;
+    let counter: u32 = seconds.div_euclid(period) as u32;
     let counter = counter.to_be_bytes();
 
-    // HOTP(K,C) = Truncate(HMAC-SHA-1(K,C))
-    //
-    // C = 8 byte counter value, this is set to T for TOTP, in plain HOTP
-    //     this counter can be based on something else than time.
-
-    // Step 1: Generate an HMAC-SHA-1 value (20 byte string)
+    // Generate an HMAC-SHA-* value (X byte string)
     let digest = hmac_digest(secret, &counter, &algorithm)?;
 
-    // Step 2: Generate a 4-byte string (Dynamic Truncation)
-    //
+    // Generate a 4-byte string (Dynamic Truncation)
     // Interpret the last 4 bits of the digest as a number (0-15)
     // and read 4 bytes from that position
-    let offset = digest.last().expect("Bad digest") & 0x0f;
-    let trunc: Vec<u8> = digest.iter().skip(offset as usize).take(4).copied().collect();
+    let offset = (digest.last().expect("Bad digest") & 0x0f) as usize;
+    let slice = digest.as_slice();
+    let value: u32 = ((slice[offset] as u32) << 24) + 
+                     ((slice[offset+1] as u32) << 16) + 
+                     ((slice[offset+2] as u32) << 8) + 
+                     ((slice[offset+3] as u32) << 0);
+    // Zero out the most significant bit
+    let value = value & 0x7fffffff;
 
-    // Step 3: Compute an HOTP value
-    // Let Snum  = StToNum(Sbits)   // Convert S to a number in 0...2^{31}-1
-    let value: u32 = (trunc[0] as u32) + 
-                     ((trunc[1] as u32) << 2) + 
-                     ((trunc[2] as u32) << 4) + 
-                     ((trunc[3] as u32) << 6);
-    // Return D = Snum mod 10^Digit //  D is a number in the range 0...10^{Digit}-1
-    let value = value % 10_000;
+    // Return desired number of digits from the value
+    let value = value % 10_u32.pow(digits);
 
-    println!("{:0>6}", value);
     Ok(value)
+}
+
+/// Calculate the digits for a TOTP URL at the current time
+pub fn calculate_now(uri: &str) -> Result<u32,TotpError> {
+    let now = time::SystemTime::now()
+        .duration_since(UNIX_EPOCH).expect("Failed to determine time");
+    calculate(uri, now.as_secs())
 }
 
 #[cfg(test)]
@@ -123,8 +138,8 @@ mod test {
 
     #[test]
     fn calculate_test() {
-        let uri = "otpauth://totp/:test?secret=NBSWY3DPEB4EICQ&algorithm=SHA1&digits=6&period=30&lock=false";
-        let code = calculate(uri).unwrap();
-        assert_eq!(code, 111222)
+        let uri = "otpauth://totp/:test?secret=NBSWY3DPEB4EICQ&algorithm=SHA1&digits=6&period=30";
+        let code = calculate(uri, 111).unwrap();
+        assert_eq!(code, 061_078)
     }
 }
