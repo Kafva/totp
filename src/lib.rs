@@ -8,6 +8,12 @@ use std::{borrow::Cow, num::ParseIntError, str::FromStr, time::{self, UNIX_EPOCH
 
 use url::{self, ParseError};
 
+macro_rules! query_get {
+    ($url:ident, $key:literal) => (
+        $url.query_pairs().find(|k| k.0 == $key).map(|k| k.1)
+    )
+}
+
 #[derive(Debug, PartialEq)]
 pub enum TotpError {
     MissingSecret,
@@ -51,20 +57,15 @@ impl From<crypto_common::InvalidLength> for TotpError {
 }
 
 /// Calculate the digits for a TOTP URL at present time
-pub fn calculate_totp_now(url: &str) -> Result<String,TotpError> {
+pub fn calculate_totp_now(url: &str) -> Result<(String,u64),TotpError> {
     let now = time::SystemTime::now()
         .duration_since(UNIX_EPOCH).expect("Failed to determine current time");
     calculate_totp(url, now.as_secs())
 }
 
-/// Calculate the digits for a TOTP URL at `epoch`
-pub fn calculate_totp(url: &str, epoch: u64) -> Result<String,TotpError> {
-    macro_rules! query_get {
-        ($url:ident, $key:literal) => (
-            $url.query_pairs().find(|k| k.0 == $key).map(|k| k.1)
-        )
-    }
-
+/// Calculate the digits for a TOTP URL at `epoch`, returns the zero-padded
+/// code and the validity period.
+pub fn calculate_totp(url: &str, epoch: u64) -> Result<(String,u64),TotpError> {
     let url = url::Url::from_str(url)?;
 
     let Some(secret) = query_get!(url, "secret") else {
@@ -107,7 +108,7 @@ pub fn calculate_totp(url: &str, epoch: u64) -> Result<String,TotpError> {
         9 => format!("{:0>9}", code),
         _ => return Err(TotpError::TooManyDigits)
     };
-    Ok(code.to_string())
+    Ok((code.to_string(), period))
 }
 
 /// Calculate the digits for a HOTP

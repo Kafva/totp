@@ -9,7 +9,7 @@ use totp::calculate_totp_now;
 
 fn main() {
     let url = "otpauth://tester@some.email.com/?secret=NBSWY3DPEB4EICQ&algorithm=SHA256";
-    let code = calculate_totp_now(url).unwrap();
-    println!("{}", code);
+    let (code, period) = calculate_totp_now(url).unwrap();
+    println!("{} ({} s)", code, period);
 }
 ```
