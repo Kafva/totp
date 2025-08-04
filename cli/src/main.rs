@@ -2,7 +2,7 @@ use std::process::ExitCode;
 
 use clap::Parser;
 
-use totp::decode;
+use totp::calculate;
 
 #[derive(Parser)]
 #[command(version, about = "Decoder for TOTP URIs")]
@@ -26,7 +26,7 @@ fn main() -> ExitCode {
        },
     };
 
-    let code = decode(uri.as_str());
+    let code = calculate(uri.as_str()).unwrap();
     println!("{}", code);
 
     ExitCode::SUCCESS
