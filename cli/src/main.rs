@@ -27,7 +27,7 @@ fn main() -> ExitCode {
     };
 
     match calculate_totp_now(url.as_str()) {
-        Ok(code) => {
+        Ok((code, _)) => {
             println!("{}", code);
             ExitCode::SUCCESS
         },
