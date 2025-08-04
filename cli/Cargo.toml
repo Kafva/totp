@@ -5,4 +5,4 @@ edition = "2024"
 
 [dependencies]
 totp = { path = ".." }
-clap = { version = "4.5.42", features = ["derive"]}
+clap = { version = "4.5.42", features = ["derive", "cargo"]}

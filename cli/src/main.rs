@@ -1,11 +1,11 @@
 use std::process::ExitCode;
 
-use clap::Parser;
+use clap::{Parser, crate_version};
 
 use totp::calculate_totp_now;
 
 #[derive(Parser)]
-#[command(version, about = "Decoder for TOTP URLs")]
+#[command(version = crate_version!(), about = "Decoder for TOTP URLs")]
 struct Args {
     #[arg(help = "String to decode, otpauth://totp/...")]
     url: Option<String>
