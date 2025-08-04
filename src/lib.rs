@@ -67,12 +67,16 @@ pub fn calculate_totp(url: &str, epoch: u64) -> Result<u32,TotpError> {
 
     let url = url::Url::from_str(url)?;
 
-    let Some(secret_b32) = query_get!(url, "secret") else {
+    let Some(secret) = query_get!(url, "secret") else {
         return Err(TotpError::MissingSecret)
     };
-    let secret = match data_encoding::BASE32_NOPAD.decode(secret_b32.as_bytes()) {
+    let secret = secret.to_uppercase();
+    let secret = secret.as_bytes();
+    let secret = match data_encoding::BASE32_NOPAD.decode(secret) {
         Ok(s) => s,
-        Err(e) => return Err(TotpError::Base32DecodeError(e))
+        Err(e) => {
+            return Err(TotpError::Base32DecodeError(e))
+        },
     };
 
     let period = match query_get!(url, "period") {
