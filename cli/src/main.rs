@@ -8,14 +8,14 @@ use totp::calculate;
 #[command(version, about = "Decoder for TOTP URIs")]
 struct Args {
     #[arg(help = "String to decode, otpauth://totp/...")]
-    uri: Option<String>
+    url: Option<String>
 }
 
 fn main() -> ExitCode {
     let args = Args::parse();
 
-    let uri = match args.uri {
-       Some(uri) => uri,
+    let url = match args.url {
+       Some(url) => url,
        None => {
             let mut buf = String::new();
             let Ok(_) = std::io::stdin().read_line(&mut buf) else {
@@ -26,7 +26,7 @@ fn main() -> ExitCode {
        },
     };
 
-    let code = calculate(uri.as_str()).unwrap();
+    let code = calculate(url.as_str()).unwrap();
     println!("{}", code);
 
     ExitCode::SUCCESS
