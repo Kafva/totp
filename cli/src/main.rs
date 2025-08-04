@@ -5,7 +5,7 @@ use clap::Parser;
 use totp::calculate_totp_now;
 
 #[derive(Parser)]
-#[command(version, about = "Decoder for TOTP URIs")]
+#[command(version, about = "Decoder for TOTP URLs")]
 struct Args {
     #[arg(help = "String to decode, otpauth://totp/...")]
     url: Option<String>

@@ -2,7 +2,7 @@
 name = "totp"
 version = "0.1.0"
 edition = "2024"
-description = "Decoder for TOTP URIs"
+description = "Decoder for TOTP URLs"
 license = "MIT"
 
 [workspace]
