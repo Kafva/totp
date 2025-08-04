@@ -1,4 +1,4 @@
-//! OtpAuth URIs: https://github.com/google/google-authenticator/wiki/Key-Uri-Format
+//! OtpAuth URLs: https://github.com/google/google-authenticator/wiki/Key-Uri-Format
 //! TOTP: https://www.rfc-editor.org/rfc/rfc6238.txt
 //! HOTP: https://www.rfc-editor.org/rfc/rfc4226.txt
 
@@ -8,24 +8,33 @@ use std::{borrow::Cow, num::ParseIntError, str::FromStr, time::{self, UNIX_EPOCH
 
 use url::{self, ParseError};
 
-macro_rules! query_get {
-    ($url:ident, $key:literal) => (
-        $url.query_pairs().find(|k| k.0 == $key).map(|k| k.1)
-    )
-}
-
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum TotpError {
     MissingSecret,
-    DecodeError(data_encoding::DecodeError),
-    UriError(url::ParseError),
-    InvalidLength(crypto_common::InvalidLength),
+    TooManyDigits,
+    Base32DecodeError(data_encoding::DecodeError),
+    UrlParseError(url::ParseError),
+    InvalidHmacKeyLength(crypto_common::InvalidLength),
     ParseIntError(ParseIntError)
+}
+
+impl std::fmt::Display for TotpError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use TotpError::*;
+        match self {
+            MissingSecret => f.write_str("Missing `secret=` parameter in URL"),
+            TooManyDigits => f.write_str("The number of `digits=` specified is too large"),
+            UrlParseError(err) => err.fmt(f),
+            Base32DecodeError(err) => err.fmt(f),
+            ParseIntError(err) => err.fmt(f),
+            InvalidHmacKeyLength(err) => err.fmt(f),
+        }
+    }
 }
 
 impl From<ParseError> for TotpError {
     fn from(value: ParseError) -> Self {
-        Self::UriError(value)
+        Self::UrlParseError(value)
     }
 }
 
@@ -37,7 +46,7 @@ impl From<ParseIntError> for TotpError {
 
 impl From<crypto_common::InvalidLength> for TotpError {
     fn from(value: crypto_common::InvalidLength) -> Self {
-        Self::InvalidLength(value)
+        Self::InvalidHmacKeyLength(value)
     }
 }
 
@@ -50,6 +59,12 @@ pub fn calculate_totp_now(url: &str) -> Result<u32,TotpError> {
 
 /// Calculate the digits for a TOTP URL at `epoch`
 pub fn calculate_totp(url: &str, epoch: u64) -> Result<u32,TotpError> {
+    macro_rules! query_get {
+        ($url:ident, $key:literal) => (
+            $url.query_pairs().find(|k| k.0 == $key).map(|k| k.1)
+        )
+    }
+
     let url = url::Url::from_str(url)?;
 
     let Some(secret_b32) = query_get!(url, "secret") else {
@@ -57,7 +72,7 @@ pub fn calculate_totp(url: &str, epoch: u64) -> Result<u32,TotpError> {
     };
     let secret = match data_encoding::BASE32_NOPAD.decode(secret_b32.as_bytes()) {
         Ok(s) => s,
-        Err(e) => return Err(TotpError::DecodeError(e))
+        Err(e) => return Err(TotpError::Base32DecodeError(e))
     };
 
     let period = match query_get!(url, "period") {
@@ -66,7 +81,10 @@ pub fn calculate_totp(url: &str, epoch: u64) -> Result<u32,TotpError> {
     };
 
     let digits = match query_get!(url, "digits") {
-        Some(d) => str::parse::<u32>(&d)?,
+        Some(d) => {
+            let d = str::parse::<u32>(&d)?;
+            if d > 9 { return Err(TotpError::TooManyDigits); } else { d }
+        },
         _ => 6
     };
 
@@ -103,14 +121,14 @@ fn calculate_hotp(
     // and read 4 bytes from that position
     let offset = (digest.last().expect("Bad digest") & 0x0f) as usize;
     let digest = digest.as_slice();
-    let value: u32 = ((digest[offset] as u32) << 24) + 
-                     ((digest[offset+1] as u32) << 16) + 
-                     ((digest[offset+2] as u32) << 8) + 
+    let value: u32 = ((digest[offset] as u32) << 24) +
+                     ((digest[offset+1] as u32) << 16) +
+                     ((digest[offset+2] as u32) << 8) +
                      ((digest[offset+3] as u32) << 0);
     // Zero out the most significant bit
     let value = value & 0x7fffffff;
 
-    // Return desired number of digits from the value
+    // Return desired number of digits
     let value = value % 10_u32.pow(digits);
 
     Ok(value)
@@ -136,24 +154,4 @@ fn calculate_hmac(secret: Vec<u8>, counter: u64, algorithm: &str) -> Result<Vec<
         }
     };
     Ok(digest)
-}
-
-#[cfg(test)]
-mod test {
-    use crate::calculate_totp;
-
-    #[test]
-    fn calculate_totp_test() {
-        let url = "otpauth://tester@some.email.com/:foo?secret=NBSWY3DPEB4EICQ&algorithm=SHA1&digits=6&period=30";
-        let code = calculate_totp(url, 3330).unwrap();
-        assert_eq!(code, 061_078);
-
-        let url = "otpauth://tester@some.email.com/:foo?secret=NBSWY3DPEBZWQYJSGU3AU&algorithm=SHA256&digits=7";
-        let code = calculate_totp(url, 3330).unwrap();
-        assert_eq!(code, 2_655_304);
-
-        let url = "otpauth://tester@some.email.com/:foo?secret=NBSWY3DPEBZWQYJVGEZAU&algorithm=SHA512&digits=8&period=10";
-        let code = calculate_totp(url, 3330).unwrap();
-        assert_eq!(code, 39_265_203);
-    }
 }

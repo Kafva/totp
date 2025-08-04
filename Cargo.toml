@@ -14,12 +14,12 @@ members = [
 [dependencies]
 # HOTP calculation
 hmac = "0.12"
-# Uri parsing
-url = "2.5.4"
-# base32 parsing
-data-encoding = "2.9.0"
 sha2 = "0.10.9"
 sha1 = "0.10.6"
+# Url parsing
+url = "2.5.4"
+# base32 decode
+data-encoding = "2.9.0"
 
 [lib]
 name = "totp"
