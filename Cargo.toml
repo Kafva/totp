@@ -20,7 +20,3 @@ sha1 = "0.10.6"
 url = "2.5.4"
 # base32 decode
 data-encoding = "2.9.0"
-
-[lib]
-name = "totp"
-path = "src/lib.rs"
