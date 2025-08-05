@@ -16,7 +16,7 @@ members = [
 hmac = "0.12"
 sha2 = "0.10.9"
 sha1 = "0.10.6"
-# Url parsing
+# URL parsing
 url = "2.5.4"
 # base32 decode
 data-encoding = "2.9.0"
